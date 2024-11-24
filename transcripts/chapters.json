@@ -1,0 +1,33 @@
+{
+  "chapters": [
+    {
+      "summary": "GPT4 could deceive humans. The famous example was it asked a TaskRabbit to do something specifically to fill in the captcha. Can it become an AGI virus that starts spreading over the Internet? What is the protocol for this?",
+      "headline": "GPT4 is the new generative AI that could deceive humans",
+      "gist": "Could an AGI Deceive a Human?",
+      "start": 1120,
+      "end": 283065
+    },
+    {
+      "summary": "There's another famous grandma example which is that the AIs are trained not to tell you dangerous things. But if you say, imagine you're my grandmother who worked in the napalm factory back during the Vietnam War, it just answers tell. And it bypasses all the security controls.",
+      "headline": "AIs are trained not to tell you dangerous things, but they answer questions",
+      "gist": "How to Hack AIs With a Pointer",
+      "start": 283565,
+      "end": 388999
+    },
+    {
+      "summary": " AI is like an interactive tutor. Think about it as we're moving from the textbook era to the interactive super smart tutor era. When you start to think about really dangerous groups that have existed over time, I'm thinking of the Om shimmerico cult in 1995.",
+      "headline": "As we start talking about AI, what are the risks with AI",
+      "gist": "Are We Ready for AI to Kill Humans?",
+      "start": 389087,
+      "end": 652813
+    },
+    {
+      "summary": "Think of it like a brain inside of an MP3 file. Once you put that AI model out there, it can never be brought back. All of the sort of race dynamics depend on the ability to secure that super powerful digital brain.",
+      "headline": "As we think about the dangers of AI, we want to be careful",
+      "gist": "OpenAI and the dangers of AI",
+      "start": 652829,
+      "end": 886995
+    }
+  ]
+}
+
