@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 import { Inbox, Loader2 } from "lucide-react";
-import React from "react";
+import React, { useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useRouter } from "next/navigation";
 import { Audio } from "react-loader-spinner";
@@ -30,10 +30,16 @@ const FileUpload = () => {
   const [uploading, setUploading] = React.useState(false);
   const [isDialogOpen, setIsDialogOpen] = React.useState(false);
   const [currentForm, setCurrentForm] = React.useState(1);
+  const [file, setFile] = useState<File | null>(null);
+  const handleChange = (file: File) => {
+    setFile(file); // Update the file state
+  };
   const { getRootProps, getInputProps, open } = useDropzone({
     accept: { "audio/*": [".mp3", ".wav", ".ogg", ".flac", ".m4a"] },
     maxFiles: 1,
-    onDrop: async () => {
+    onDrop: async (acceptedFiles: File[]) => {
+      const file = acceptedFiles[0];
+      handleChange(file);
       setIsDialogOpen(true);
       const loadingToast = toast.loading("Uploading your file", {
         description: "the_joe_rogan_experience.mp3",

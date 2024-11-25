@@ -3,8 +3,17 @@ import Link from "next/link";
 import { Globe, Podcast } from "lucide-react";
 import FileUpload from "../components/FileUpload";
 import { Header } from "../components/spotify/Navbar";
+import { getSessionCookie, setSessionCookie } from "@/server/actions";
 
 export default async function Home() {
+  const sessionCookie = await getSessionCookie();
+  let userId;
+  if (sessionCookie) {
+    userId = sessionCookie.value;
+  } else {
+    userId = await setSessionCookie();
+  }
+
   return (
     <div>
       <Header></Header>
