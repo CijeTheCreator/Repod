@@ -4,7 +4,6 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import WaveSurfer from "wavesurfer.js";
 import { Episode } from "./spotify/MediaItem";
-import { getChapters } from "@/lib/presenter";
 import { LanguageContext } from "./Providers";
 
 interface WaveSurferContextProps {

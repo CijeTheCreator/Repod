@@ -2,6 +2,14 @@
 
 import { cookies } from "next/headers";
 import { pinata } from "./pinata";
+import { PrismaClient } from "@prisma/client";
+import { Podcast } from "@/app/components/spotify/Sidebar";
+import { Episode } from "@/app/components/spotify/MediaItem";
+import { formatDuration } from "@/lib/presenter";
+import { Divisions } from "@/lib/utils";
+import axios from "axios";
+
+const prisma = new PrismaClient();
 
 export const generateRandomString = async (length: number) => {
   const characters =
@@ -48,4 +56,318 @@ export const UploadFile = async (userId: string, file: File) => {
 };
 async function saveToNeon(url: string, userId: string) {
   throw new Error("Function not implemented.");
+}
+
+export async function getPodcasts(): Promise<Podcast[]> {
+  const podcasts = await prisma.podcast.findMany({
+    select: {
+      id: true,
+      title: true,
+      author: true,
+      imageUrl: true,
+    },
+  });
+
+  return podcasts.map((podcast: Podcast) => ({
+    id: podcast.id,
+    titile: podcast.titile, // Fixing the typo from your example "titile" instead of "title"
+    author: podcast.author,
+    imageUrl: podcast.imageUrl || null, // Ensures optional field handling
+  }));
+}
+
+export async function getPodcastById(id: number) {
+  const podcast = await prisma.podcast.findUnique({
+    where: {
+      id: id, // Use the id to find a unique podcast
+    },
+  });
+
+  if (!podcast) {
+    throw new Error(`Podcast with id ${id} not found`);
+  }
+
+  return podcast;
+}
+
+export async function getSummary(podcastId: number, language: string) {
+  const podcast = await prisma.podcast.findUnique({
+    where: {
+      id: podcastId,
+    },
+    include: {
+      transcripts: {
+        where: {
+          language: language,
+        },
+        select: {
+          summary: true,
+        },
+      },
+    },
+  });
+
+  if (!podcast || !podcast.transcripts.length) {
+    throw new Error(
+      `Summary not found for podcast ID ${podcastId} in ${language}`,
+    );
+  }
+
+  return podcast.transcripts[0].summary;
+}
+
+export async function getChapters(
+  podcastId: number,
+  language: string,
+): Promise<Episode[]> {
+  const podcast = await prisma.podcast.findUnique({
+    where: {
+      id: podcastId,
+    },
+    include: {
+      transcripts: {
+        where: {
+          language: language,
+        },
+        select: {
+          chapters: true,
+        },
+      },
+    },
+  });
+
+  if (
+    !podcast ||
+    !podcast.transcripts.length ||
+    !podcast.transcripts[0].chapters
+  ) {
+    throw new Error(
+      `Chapters not found for podcast ID ${podcastId} in ${language}`,
+    );
+  }
+
+  const chapters = podcast.transcripts[0].chapters as Array<{
+    start: number;
+    end: number;
+    headline: string;
+    summary: string;
+    gist: string;
+  }>;
+
+  return chapters.map(
+    (
+      value: {
+        start: number;
+        end: number;
+        headline: string;
+        summary: string;
+        gist: string;
+      },
+      index: number,
+    ) => ({
+      id: index + 1,
+      episode_number: index + 1,
+      duration: formatDuration(value.end - value.start),
+      title: value.headline,
+      summary: value.summary,
+      gist: value.gist,
+      isPlaying: false,
+      start: value.start,
+    }),
+  );
+}
+
+export async function getLyrics(podcastId: number, language: string) {
+  try {
+    const transcripts = await prisma.transcript.findMany({
+      where: {
+        podcastId,
+        language,
+      },
+      select: {
+        text: true,
+        start: true,
+        sentiment: true,
+        speaker: true,
+      },
+    });
+
+    const lines = transcripts.map((value: any) => {
+      return {
+        startTimeMs: `${Math.ceil(value.start * 1000)}`,
+        words: value.text,
+        sentiment: value.sentiment || "null",
+        speaker: value.speaker,
+      };
+    });
+
+    return { lines };
+  } catch (error) {
+    console.error("Error fetching lyrics:", error);
+    throw new Error("Failed to fetch lyrics");
+  }
+}
+
+export async function getDivisions(
+  theme: string | undefined,
+  language: string,
+) {
+  // Fetch lines from the database based on the provided theme and language
+  const lines_ = await prisma.transcript.findMany({
+    where: {
+      theme: theme || "default", // Use a default theme if none is provided
+      language: language,
+    },
+    orderBy: {
+      start: "asc", // Ensure lines are sorted by start time
+    },
+  });
+
+  if (!lines_ || lines_.length === 0) {
+    return [];
+  }
+
+  const divisions: Divisions = [];
+  const colors = [
+    "bg-blue-100 dark:bg-blue-700",
+    "bg-green-100 dark:bg-green-700",
+    "bg-red-100 dark:bg-red-700",
+    "bg-yellow-100 dark:bg-yellow-700",
+    "bg-lime-100 dark:bg-lime-700",
+  ];
+  const speakerColorMap: Record<string, string> = {};
+  let currentOrder = 1;
+  let totalDuration = 0;
+
+  // Calculate total duration for percentage calculation
+  lines_.forEach((line, index) => {
+    const duration =
+      index < lines_.length - 1 ? lines_[index + 1].start - line.start : 0; // Last line has no duration
+    totalDuration += duration;
+  });
+
+  console.log("Total Duration is: ", totalDuration);
+
+  // Process each line and calculate its division
+  lines_.forEach((line, index) => {
+    const duration =
+      index < lines_.length - 1 ? lines_[index + 1].start - line.start : 0;
+
+    const speaker = line.speaker || "Unknown";
+    if (!speakerColorMap[speaker]) {
+      // Assign a color to the speaker if not already assigned
+      speakerColorMap[speaker] =
+        colors[Object.keys(speakerColorMap).length % colors.length];
+    }
+
+    const percentage = totalDuration > 0 ? duration / totalDuration : 0;
+
+    divisions.push({
+      percentage: parseFloat(percentage.toFixed(19)),
+      color: speakerColorMap[speaker],
+      order: currentOrder++,
+    });
+  });
+
+  return divisions;
+}
+
+async function getTranscript(podcastId: number): Promise<any> {
+  const apiKey = process.env.ASSEMBLYAI_API_KEY;
+  const url = "https://api.assemblyai.com/v2/transcript";
+
+  const response = await axios.post(
+    url,
+    {
+      audio_url: `https://example.com/audio/${podcastId}.mp3`,
+      language_code: "en_us",
+      sentiment_analysis: true,
+      speaker_labels: true,
+      punctuate: true,
+    },
+    {
+      headers: {
+        Authorization: apiKey,
+        "Content-Type": "application/json",
+      },
+    },
+  );
+
+  const transcriptId = response.data.id;
+
+  const transcriptStatusResponse = await axios.get(
+    `https://api.assemblyai.com/v2/transcript/${transcriptId}`,
+    {
+      headers: {
+        Authorization: apiKey,
+      },
+    },
+  );
+
+  if (transcriptStatusResponse.data.status !== "completed") {
+    throw new Error("Transcript is not completed yet.");
+  }
+
+  return transcriptStatusResponse.data.words.map((word: any) => ({
+    start: word.start,
+    text: word.text,
+    sentiment: word.confidence > 0.8 ? "positive" : "neutral",
+    speaker: word.speaker,
+  }));
+}
+
+async function translateText(
+  text: string,
+  targetLang: string,
+): Promise<string> {
+  const apiKey = process.env.DEEPL_API_KEY;
+  const url = "https://api-free.deepl.com/v2/translate";
+
+  const response = await axios.post(url, null, {
+    params: {
+      auth_key: apiKey,
+      text: text,
+      target_lang: targetLang.toUpperCase(),
+    },
+  });
+
+  return response.data.translations[0].text;
+}
+
+async function addNewTranscript(
+  userId: string,
+  podcastId: number,
+  targetLang: string,
+) {
+  let user = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        id: userId,
+        podcasts: {
+          create: [],
+        },
+      },
+    });
+  }
+
+  const englishTranscript = await getTranscript(podcastId);
+
+  for (const line of englishTranscript) {
+    const translatedText = await translateText(line.text, targetLang);
+
+    await prisma.transcript.create({
+      data: {
+        language: targetLang,
+        text: translatedText,
+        start: line.start,
+        sentiment: line.sentiment,
+        speaker: line.speaker,
+        podcastId: podcastId,
+      },
+    });
+  }
 }

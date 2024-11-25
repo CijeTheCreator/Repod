@@ -1,9 +1,11 @@
+"use client";
+
 import { useContext, useEffect, useRef, useState } from "react";
 import { FullscreenTranscripts } from "./FullPageLyrics";
 import { LyricsWrapper } from "./LyricsTextWrapper";
-import { getLyrics } from "@/lib/presenter";
 import { LanguageContext } from "@/app/components/Providers";
-import { AskAiDialog } from "./AskAIDialog";
+import { getLyrics } from "@/server/actions";
+
 export type Line = {
   startTimeMs: string;
   words: string;
@@ -11,43 +13,49 @@ export type Line = {
   speaker: string;
 };
 
-function useCurrentLine(timestamp: number) {
+function useCurrentLine(timestamp: number, lyricId: number) {
   const [currentLine, setCurrentLine] = useState<Line | null>(null);
+  const [lyrics, setLyrics] = useState<{ lines: Line[] }>({ lines: [] });
   const context = useContext(LanguageContext);
   const { language } = context!;
 
   useEffect(() => {
-    const lyrics = getLyrics(language);
+    async function fetchLyrics() {
+      const fetchedLyrics = await getLyrics(lyricId, language);
+      setLyrics(fetchedLyrics);
+    }
+    fetchLyrics();
+  }, [language, lyricId]);
+
+  useEffect(() => {
     const nextLineIndex = lyrics.lines.findIndex(
       (line: Line) => Number(line.startTimeMs) > timestamp,
     );
 
     if (nextLineIndex === 0) {
       setCurrentLine(lyrics.lines[0]);
+    } else {
+      setCurrentLine(lyrics.lines[nextLineIndex - 1]);
     }
+  }, [timestamp, lyrics]);
 
-    setCurrentLine(lyrics.lines[nextLineIndex - 1]);
-  }, [timestamp, language]);
-
-  return { currentLine };
+  return { currentLine, lyrics };
 }
+
 interface LyricsProps {
   timestamp: number;
   isSentimentHighlightingOn: boolean;
   isSpeakerHighlightingOn: boolean;
+  lyricId: number;
 }
+
 function getSpeakerColor(
   speaker: string | undefined,
   isSpeakerHighlightingOn: boolean,
 ) {
-  console.log("Hit 1");
-  if (!speaker) {
+  if (!speaker || !isSpeakerHighlightingOn) {
     return "emerald";
   }
-  if (!isSpeakerHighlightingOn) {
-    return "emerald";
-  }
-  console.log("Hit 2");
   switch (speaker) {
     case "A":
       return "blue";
@@ -56,22 +64,23 @@ function getSpeakerColor(
     case "C":
       return "red";
     default:
-      console.log("Hit 3");
       return "emerald";
   }
 }
+
 function Lyrics({
   timestamp,
   isSentimentHighlightingOn,
   isSpeakerHighlightingOn,
+  lyricId,
 }: LyricsProps) {
   const currentLineRef = useRef<HTMLParagraphElement | null>(null);
   const [color, setColor] = useState<string>("emerald");
-  const { currentLine } = useCurrentLine(timestamp);
-  const mainRef = useRef<HTMLDivElement | null>(null); // Reference to the main container
+  const { currentLine, lyrics } = useCurrentLine(timestamp, lyricId);
+  const mainRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
     if (currentLineRef.current && mainRef.current) {
-      // Scroll the main container to center the current line
       currentLineRef.current.scrollIntoView({
         behavior: "smooth",
         block: "center",
@@ -80,17 +89,11 @@ function Lyrics({
     }
   }, [currentLine, isSpeakerHighlightingOn]);
 
-  const context = useContext(LanguageContext);
-  const { language } = context!;
-
-  const lyrics = getLyrics(language);
   return (
     <div
       className={`relative p-8 bg-${color}-100 dark:bg-${color}-800 rounded-lg transition-all duration-1000 ease-in-out`}
     >
-      {/* Icon positioned absolutely in the top-right */}
       <div className="absolute top-2 right-2">
-        {/* <AskAiDialog /> */}
         <FullscreenTranscripts
           LyricsNode={
             <LyricsWrapper
@@ -101,14 +104,14 @@ function Lyrics({
               timestamp={timestamp}
               fullScreen={true}
               isSentimentHighlightingOn={isSentimentHighlightingOn}
-              setColor={function (): void {
+              setColor={() =>
                 setColor(
                   getSpeakerColor(
                     currentLine?.speaker,
                     isSpeakerHighlightingOn,
                   ),
-                );
-              }}
+                )
+              }
             />
           }
           defaultColor={color}
@@ -122,11 +125,11 @@ function Lyrics({
         currentLine={currentLine}
         timestamp={timestamp}
         isSentimentHighlightingOn={isSentimentHighlightingOn}
-        setColor={function (): void {
+        setColor={() =>
           setColor(
             getSpeakerColor(currentLine?.speaker, isSpeakerHighlightingOn),
-          );
-        }}
+          )
+        }
       />
     </div>
   );

@@ -1,3 +1,4 @@
+import { getPodcasts } from "@/server/actions";
 import Header from "../components/spotify/Header";
 import Sidebar, { Podcast } from "../components/spotify/Sidebar";
 
@@ -6,20 +7,7 @@ import PageContent from "./components/PageContent";
 export const revalidate = 0;
 
 export default async function Home() {
-  const podcasts: Podcast[] = [
-    {
-      id: 1,
-      titile: "The Joe Rogan Experience 1",
-      author: "Joe Rogan",
-      imageUrl: "/joe.jpg",
-    },
-    {
-      id: 2,
-      titile: "The Joe Rogan Experience 2",
-      author: "Joe Rogan",
-      imageUrl: "/joe.jpg",
-    },
-  ];
+  const podcasts: Podcast[] = await getPodcasts();
   return (
     <Sidebar songs={[]}>
       {/* You can duplicate the div below */}

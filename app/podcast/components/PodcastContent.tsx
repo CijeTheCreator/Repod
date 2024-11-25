@@ -1,18 +1,35 @@
 "use client";
 
 import PlayingIndicator from "@/app/components/spotify/LikeButton";
-import MediaItem from "../../components/spotify/MediaItem";
-import { useContext, useEffect } from "react";
-import { getChapters, keyUnavailable } from "@/lib/presenter";
+import MediaItem, { Episode } from "../../components/spotify/MediaItem";
+import { useContext, useEffect, useState } from "react";
+import { keyUnavailable } from "@/lib/presenter";
 import { LanguageContext } from "@/app/components/Providers";
 import { WaveSurferContext } from "@/app/components/WaveSurferProvider";
+import { getChapters } from "@/server/actions";
 
-const PodcastEpisodes = () => {
+const PodcastEpisodes = ({ podcastId }: { podcastId: number }) => {
   const context = useContext(LanguageContext);
   const { language } = context!;
-  const episodes = getChapters(language);
   const wavesurferContext = useContext(WaveSurferContext);
   const { wavesurfer } = wavesurferContext!;
+
+  const [episodes, setEpisodes] = useState<Episode[]>([]);
+
+  useEffect(() => {
+    // Fetch episodes using the async function
+    const fetchEpisodes = async () => {
+      try {
+        const chapters = await getChapters(podcastId, language);
+        setEpisodes(chapters);
+      } catch (error) {
+        console.error("Failed to fetch episodes:", error);
+      }
+    };
+
+    fetchEpisodes();
+  }, [podcastId, language]);
+
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       const stringNumbersFrom1to10 = [
@@ -29,15 +46,17 @@ const PodcastEpisodes = () => {
       if (keyUnavailable(e)) return;
       if (stringNumbersFrom1to10.includes(e.key)) {
         e.preventDefault();
-        wavesurfer?.setTime(episodes[Number(e.key)].start / 1000);
-        wavesurfer?.play();
+        const episodeIndex = Number(e.key) - 1;
+        if (episodes[episodeIndex]) {
+          wavesurfer?.setTime(episodes[episodeIndex].start / 1000);
+          wavesurfer?.play();
+        }
       }
     };
 
     document.addEventListener("keydown", down);
     return () => document.removeEventListener("keydown", down);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [episodes]);
+  }, [episodes, wavesurfer]);
 
   return (
     <div className="flex flex-col gap-y-2 w-full p-6 pb-14">
@@ -52,7 +71,6 @@ const PodcastEpisodes = () => {
               data={episode}
             />
           </div>
-          {/* TODO: Add is playing indicator */}
           <PlayingIndicator
             episodeId={episode.id}
             isPlaying={episode.isPlaying}

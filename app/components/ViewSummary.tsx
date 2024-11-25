@@ -17,9 +17,10 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { useContext, useEffect, useState } from "react";
 import { LanguageContext } from "./Providers";
-import { getSummary, keyUnavailable } from "@/lib/presenter";
+import { keyUnavailable } from "@/lib/presenter";
+import { getSummary } from "@/server/actions";
 
-export function ViewSummary() {
+export function ViewSummary({ podcastId }: { number }) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -35,7 +36,7 @@ export function ViewSummary() {
   }, []);
   const context = useContext(LanguageContext);
   const { language } = context!;
-  const summary = getSummary(language);
+  const summary = getSummary(podcastId, language);
 
   return (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
