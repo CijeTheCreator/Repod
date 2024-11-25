@@ -36,7 +36,7 @@ const FileUpload = () => {
     useState<TSpeakersForm | null>(null);
 
   const handleChange = async (file: File) => {
-    const url = await uploadFile("", file);
+    const url = await uploadFile(file);
     if (url == "Something went wrong") {
       toast.error("Error uploading file");
       setFileURL(-1);

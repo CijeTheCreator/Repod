@@ -44,15 +44,6 @@ export function RedactionForm({
   const router = useRouter();
 
   function onSubmit(_data: TRedactionForm) {
-    // const toastId = toast.loading("Transcribing podcast", {
-    //   description: "The Joe Rogan Experience 2",
-    //   cancel: {
-    //     label: "Cancel",
-    //     onClick: () => toast.dismiss(toastId),
-    //   },
-    // });
-    // toast.dismiss(toastId);
-    // toast.success("The Joe Rogan Experience 2 created");
     setRedactionFormStateAction(_data);
     finalSubmitAction();
   }

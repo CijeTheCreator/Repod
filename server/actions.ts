@@ -11,6 +11,9 @@ import axios from "axios";
 import { client } from "./assemblyai";
 import { TOverallForm } from "@/lib/types";
 import { PiiPolicy } from "assemblyai";
+import { openai } from "./openai";
+import { array } from "zod";
+import { arrayBuffer } from "stream/consumers";
 
 const prisma = new PrismaClient();
 
@@ -44,14 +47,13 @@ export async function setSessionCookie() {
   return key;
 }
 
-export const uploadFile = async (userId: string, file: File) => {
+export const uploadFile = async (file: File) => {
   try {
     const uploadData = await pinata.upload.file(file);
     const url = await pinata.gateways.createSignedURL({
       cid: uploadData.cid,
-      expires: 3600,
+      expires: 36000000,
     });
-    await saveToNeon(url, userId);
     return url;
   } catch (e) {
     console.log(e);
@@ -343,13 +345,13 @@ export async function addNewTranscript(
     });
   }
 
-  // Create a new podcast for the user
+  const imageUrl = await uploadFile(basic_details.picture);
   const podcast = await prisma.podcast.create({
     data: {
       title: basic_details.podcastTitle,
       author: basic_details.authorName,
-      imageUrl: generatePinataImageUrl(basic_details.picture),
-      userId: userId, // Associate the podcast with the user
+      imageUrl: imageUrl,
+      userId: userId,
     },
   });
 
@@ -397,6 +399,39 @@ async function askAI(transcriptId: string, question: string): Promise<string> {
   });
   return response;
 }
-function generatePinataImageUrl(picture: any) {
-  throw new Error("Function not implemented.");
+
+async function askAIAudio(transcriptId: string, file: File) {
+  const url = await uploadFile(file);
+  const transcript = await client.transcripts.transcribe({
+    audio: url,
+    format_text: true,
+  });
+  const sentencesResponse = await client.transcripts.sentences(transcript.id);
+  const sentences = sentencesResponse.sentences;
+  const question = sentences
+    .map((sentence) => {
+      return sentence.text;
+    })
+    .join("\n");
+
+  const textAnswer = await askAI(transcriptId, question);
+  const audioAnswerUrl = generateAIResponseAudio(textAnswer);
+  return {
+    textAnswer,
+    audioAnswerUrl,
+  };
+}
+
+async function generateAIResponseAudio(text: string) {
+  const mp3 = await openai.audio.speech.create({
+    model: "tts-1",
+    voice: "alloy",
+    input: text,
+  });
+  const responseArrayBuffer = await mp3.arrayBuffer();
+  const audioFile = new File([responseArrayBuffer], "audio.mp3", {
+    type: "audio/mpeg",
+  });
+  const url = uploadFile(audioFile);
+  return url;
 }
