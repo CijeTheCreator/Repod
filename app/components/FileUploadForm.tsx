@@ -1,13 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
-import Link from "next/link";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { z } from "zod";
-
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Form,
   FormControl,
@@ -19,55 +15,31 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { BasicDetailsFormSchema, TBasicDetailsForm } from "@/lib/types";
 
-const FormSchema = z.object({
-  podcastTitle: z.string().min(2, {
-    message: "Username must be at least 2 characters.",
-  }),
-  authorName: z.string().min(2, {
-    message: "Username must be at least 2 characters.",
-  }),
-  filter_profanity: z.boolean().default(false).optional(),
-  picture: z
-    .any()
-    .refine(
-      (files) => {
-        return Array.from(files).every((file) => file instanceof File);
-      },
-      { message: "Expected a file" },
-    )
-    .refine(
-      (files: File[]) =>
-        Array.from(files).every((file) =>
-          ACCEPTED_IMAGE_TYPES.includes(file.type),
-        ),
-      "Only these types are allowed .jpg, .jpeg, .png and .webp",
-    ),
-});
-
-const ACCEPTED_IMAGE_TYPES = [
-  "image/jpeg",
-  "image/jpg",
-  "image/png",
-  "image/webp",
-];
 export interface UploadFormProps {
   isHidden: boolean;
-  setCurrentForm: React.Dispatch<React.SetStateAction<number>>;
+  setCurrentFormAction: React.Dispatch<React.SetStateAction<number>>;
 }
 export function FileUploadForm({
   isHidden: isVisible,
-  setCurrentForm,
-}: UploadFormProps) {
-  const form = useForm<z.infer<typeof FormSchema>>({
-    resolver: zodResolver(FormSchema),
+  setCurrentFormAction,
+  setBasicDetailsFormStateAction,
+}: UploadFormProps & {
+  setBasicDetailsFormStateAction: React.Dispatch<
+    React.SetStateAction<TBasicDetailsForm | null>
+  >;
+}) {
+  const form = useForm<TBasicDetailsForm>({
+    resolver: zodResolver(BasicDetailsFormSchema),
     defaultValues: {
       podcastTitle: "",
     },
   });
 
-  function onSubmit(data: z.infer<typeof FormSchema>) {
-    ("");
+  function onSubmit(data: TBasicDetailsForm) {
+    setBasicDetailsFormStateAction(data);
+    setCurrentFormAction(2);
   }
 
   return (
@@ -147,14 +119,7 @@ export function FileUploadForm({
           }}
         />
         <div className="flex gap-2">
-          <Button
-            type="submit"
-            onClick={() => {
-              setCurrentForm(2);
-            }}
-          >
-            Next
-          </Button>
+          <Button type="submit">Next</Button>
         </div>
       </form>
     </Form>

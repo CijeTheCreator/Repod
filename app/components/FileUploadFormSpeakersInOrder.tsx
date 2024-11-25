@@ -20,23 +20,25 @@ import { Textarea } from "@/components/ui/textarea";
 import { useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import { UploadFormProps } from "./FileUploadForm";
-
-const FormSchema = z.object({
-  identify_speakers: z.boolean().default(false).optional(),
-  speakers: z.string(),
-});
+import { SpeakersFormSchema, TSpeakersForm } from "@/lib/types";
 
 export function SpeakersForm({
   isHidden: isVisible,
-  setCurrentForm,
-}: UploadFormProps) {
+  setCurrentFormAction,
+  setSpeakersFormStateAction,
+}: UploadFormProps & {
+  setSpeakersFormStateAction: React.Dispatch<
+    React.SetStateAction<TSpeakersForm | null>
+  >;
+}) {
   const [disableForm, setDisableForm] = useState(false);
-  const form = useForm<z.infer<typeof FormSchema>>({
-    resolver: zodResolver(FormSchema),
+  const form = useForm<TSpeakersForm>({
+    resolver: zodResolver(SpeakersFormSchema),
   });
 
-  function onSubmit(_data: z.infer<typeof FormSchema>) {
-    ("");
+  function onSubmit(_data: TSpeakersForm) {
+    setSpeakersFormStateAction(_data);
+    setCurrentFormAction(3);
   }
 
   return (
@@ -95,7 +97,7 @@ export function SpeakersForm({
         <div className="flex gap-2">
           <Button
             onClick={() => {
-              setCurrentForm(3);
+              setCurrentFormAction(3);
             }}
             type="submit"
           >
@@ -103,7 +105,7 @@ export function SpeakersForm({
           </Button>
           <Button
             onClick={() => {
-              setCurrentForm(1);
+              setCurrentFormAction(1);
             }}
             variant={"secondary"}
           >

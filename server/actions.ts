@@ -9,6 +9,8 @@ import { formatDuration } from "@/lib/presenter";
 import { Divisions } from "@/lib/utils";
 import axios from "axios";
 import { client } from "./assemblyai";
+import { TOverallForm } from "@/lib/types";
+import { PiiPolicy } from "assemblyai";
 
 const prisma = new PrismaClient();
 
@@ -28,7 +30,7 @@ export const generateRandomString = async (length: number) => {
 export async function getSessionCookie() {
   const cookieStore = await cookies();
   const sessionKey = cookieStore.get("sessionID");
-  return sessionKey;
+  return sessionKey?.value;
 }
 
 export async function setSessionCookie() {
@@ -39,9 +41,10 @@ export async function setSessionCookie() {
     value: key,
     httpOnly: true,
   });
+  return key;
 }
 
-export const UploadFile = async (userId: string, file: File) => {
+export const uploadFile = async (userId: string, file: File) => {
   try {
     const uploadData = await pinata.upload.file(file);
     const url = await pinata.gateways.createSignedURL({
@@ -49,7 +52,7 @@ export const UploadFile = async (userId: string, file: File) => {
       expires: 3600,
     });
     await saveToNeon(url, userId);
-    return "success";
+    return url;
   } catch (e) {
     console.log(e);
     return "Something went wrong";
@@ -241,7 +244,7 @@ export async function getDivisions(
   let totalDuration = 0;
 
   // Calculate total duration for percentage calculation
-  lines_.forEach((line, index) => {
+  lines_.forEach((line: any, index: any) => {
     const duration =
       index < lines_.length - 1 ? lines_[index + 1].start - line.start : 0; // Last line has no duration
     totalDuration += duration;
@@ -250,7 +253,7 @@ export async function getDivisions(
   console.log("Total Duration is: ", totalDuration);
 
   // Process each line and calculate its division
-  lines_.forEach((line, index) => {
+  lines_.forEach((line: any, index: any) => {
     const duration =
       index < lines_.length - 1 ? lines_[index + 1].start - line.start : 0;
 
@@ -276,10 +279,22 @@ export async function getDivisions(
 async function getTranscript(
   audioUrl: string,
   podcastId: number,
+  { basic_details, redaction, speakers }: TOverallForm,
 ): Promise<any> {
+  const redactionKeys = Object.keys(redaction);
+  const redactionList = redactionKeys.filter((value, index) => {
+    return redaction[value as keyof typeof redaction];
+  }) as PiiPolicy[];
   let transcript = await client.transcripts.transcribe({
     audio: audioUrl,
     speaker_labels: true,
+    auto_chapters: true,
+    redact_pii_audio: true,
+    filter_profanity: basic_details.filter_profanity,
+    redact_pii_policies: redactionList,
+    sentiment_analysis: true,
+    format_text: true,
+    speakers_expected: speakers.speakers.split(",").length,
   });
   await updatePodcastTranscriptionId(podcastId, transcript.id);
   const sentencesResponse = await client.transcripts.sentences(transcript.id);
@@ -306,13 +321,13 @@ async function translateText(
 }
 
 export async function addNewTranscript(
-  userId: string,
+  { basic_details, redaction, speakers }: TOverallForm,
   audioUrl: string,
-  targetLangs: string[] = ["es", "de", "fr"], // Default to Spanish, German, French
-  podcastTitle: string,
-  podcastAuthor: string,
-  podcastImageUrl?: string,
 ) {
+  let userId = await getSessionCookie();
+  if (!userId) {
+    userId = await setSessionCookie();
+  }
   let user = await prisma.user.findUnique({
     where: { id: userId },
   });
@@ -331,15 +346,19 @@ export async function addNewTranscript(
   // Create a new podcast for the user
   const podcast = await prisma.podcast.create({
     data: {
-      title: podcastTitle,
-      author: podcastAuthor,
-      imageUrl: podcastImageUrl,
+      title: basic_details.podcastTitle,
+      author: basic_details.authorName,
+      imageUrl: generatePinataImageUrl(basic_details.picture),
       userId: userId, // Associate the podcast with the user
     },
   });
 
-  const englishTranscript = await getTranscript(audioUrl, podcast.podcastId);
-
+  const englishTranscript = await getTranscript(audioUrl, podcast.podcastId, {
+    basic_details,
+    redaction,
+    speakers,
+  });
+  const targetLangs = ["fr", "germ", "sp"];
   for (const line of englishTranscript) {
     for (const targetLang of targetLangs) {
       const translatedText = await translateText(line.text, targetLang);
@@ -377,4 +396,7 @@ async function askAI(transcriptId: string, question: string): Promise<string> {
     prompt: question,
   });
   return response;
+}
+function generatePinataImageUrl(picture: any) {
+  throw new Error("Function not implemented.");
 }

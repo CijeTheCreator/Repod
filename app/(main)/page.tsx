@@ -9,7 +9,7 @@ export default async function Home() {
   const sessionCookie = await getSessionCookie();
   let userId;
   if (sessionCookie) {
-    userId = sessionCookie.value;
+    userId = sessionCookie;
   } else {
     userId = await setSessionCookie();
   }

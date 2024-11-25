@@ -3,37 +3,92 @@
 import { Inbox, Loader2 } from "lucide-react";
 import React, { useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { useRouter } from "next/navigation";
-import { Audio } from "react-loader-spinner";
 
+import { useRouter } from "next/navigation";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { FileUploadForm } from "./FileUploadForm";
-import { SpeakersForm } from "./FileUploadFormSpeakersInOrder";
-import { RedactionForm } from "./RedactionForm";
 import { Forms } from "./Forms";
 import { delay, keyUnavailable } from "@/lib/presenter";
+import { addNewTranscript, uploadFile } from "@/server/actions";
+import { TBasicDetailsForm, TRedactionForm, TSpeakersForm } from "@/lib/types";
 
 const FileUpload = () => {
-  // const router = useRouter();
   const [uploading, setUploading] = React.useState(false);
   const [isDialogOpen, setIsDialogOpen] = React.useState(false);
   const [currentForm, setCurrentForm] = React.useState(1);
-  const [file, setFile] = useState<File | null>(null);
-  const handleChange = (file: File) => {
-    setFile(file); // Update the file state
+  const [fileURL, setFileURL] = useState<string | null | number>(null);
+  const router = useRouter();
+
+  //Form States
+  const [redactionFormState, setRedactionFormState] =
+    useState<TRedactionForm | null>(null);
+
+  const [basicDetailsFormState, setBasicDetailsFormState] =
+    useState<TBasicDetailsForm | null>(null);
+
+  const [speakersFormState, setSpeakersFormState] =
+    useState<TSpeakersForm | null>(null);
+
+  const handleChange = async (file: File) => {
+    const url = await uploadFile("", file);
+    if (url == "Something went wrong") {
+      toast.error("Error uploading file");
+      setFileURL(-1);
+      return;
+    }
+    setFileURL(url);
   };
+  const pollFileResult = (callback: () => void) => {
+    const intervalId = setInterval(() => {
+      if (fileURL !== null) {
+        clearInterval(intervalId);
+        callback();
+      }
+    }, 500);
+  };
+
+  const handleSubmit = async () => {
+    pollFileResult(() => {
+      if (!fileURL) {
+        return;
+      }
+      if (typeof fileURL == "number") {
+        toast.error(
+          "Cannot submit because an error occured while uploading your file, refresh the page to start over",
+        );
+        return;
+      }
+      //Submit the file here
+      if (!basicDetailsFormState || !redactionFormState || !speakersFormState)
+        return toast.error("Error collecting form details");
+
+      const toastId = toast.loading("Transcribing podcast", {
+        description: basicDetailsFormState.podcastTitle,
+        cancel: {
+          label: "Cancel",
+          onClick: () => toast.dismiss(toastId),
+        },
+      });
+      addNewTranscript(
+        {
+          basic_details: basicDetailsFormState,
+          redaction: redactionFormState,
+          speakers: speakersFormState,
+        },
+        fileURL,
+      );
+      toast.dismiss(toastId);
+      toast.success(basicDetailsFormState.podcastTitle);
+      router.push("/podcasts");
+    });
+  };
+
   const { getRootProps, getInputProps, open } = useDropzone({
     accept: { "audio/*": [".mp3", ".wav", ".ogg", ".flac", ".m4a"] },
     maxFiles: 1,
@@ -42,7 +97,7 @@ const FileUpload = () => {
       handleChange(file);
       setIsDialogOpen(true);
       const loadingToast = toast.loading("Uploading your file", {
-        description: "the_joe_rogan_experience.mp3",
+        description: file.name,
         cancel: {
           label: "Cancel",
           onClick: () => toast.dismiss(loadingToast),
@@ -60,7 +115,6 @@ const FileUpload = () => {
       console.log("Key down");
       if (e.key === "Enter") {
         e.preventDefault();
-        //TODO: Other form submission stuff
         setIsDialogOpen(false);
       }
       if (e.key === "u") {
@@ -106,7 +160,14 @@ const FileUpload = () => {
               Your podcast is uploading I just need a few final details!
             </DialogDescription>
           </DialogHeader>
-          <Forms currentForm={currentForm} setCurrentForm={setCurrentForm} />
+          <Forms
+            currentForm={currentForm}
+            setCurrentForm={setCurrentForm}
+            setSpeakersFormStateAction={setSpeakersFormState}
+            setBasicDetailsFormStateAction={setBasicDetailsFormState}
+            setRedactionFormStateAction={setRedactionFormState}
+            submitForm={() => handleSubmit()}
+          />
         </DialogContent>
       </Dialog>
     </div>
