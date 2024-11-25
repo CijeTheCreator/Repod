@@ -17,14 +17,15 @@ model User {
 }
 
 model Podcast {
-  id          Int          @id @default(autoincrement())
-  title       String
-  author      String
-  imageUrl    String? // Optional field
-  userId      String
-  user        User         @relation(fields: [userId], references: [id])
-  episodes    Episode[]
-  transcripts Transcript[]
+  id              Int          @id @default(autoincrement())
+  title           String
+  author          String
+  imageUrl        String? // Optional field
+  transcriptionId String? // Optional field
+  userId          String
+  user            User         @relation(fields: [userId], references: [id])
+  episodes        Episode[]
+  transcripts     Transcript[]
 }
 
 model Episode {

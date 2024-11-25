@@ -8,6 +8,7 @@ import { Episode } from "@/app/components/spotify/MediaItem";
 import { formatDuration } from "@/lib/presenter";
 import { Divisions } from "@/lib/utils";
 import axios from "axios";
+import { client } from "./assemblyai";
 
 const prisma = new PrismaClient();
 
@@ -272,48 +273,18 @@ export async function getDivisions(
   return divisions;
 }
 
-async function getTranscript(podcastId: number): Promise<any> {
-  const apiKey = process.env.ASSEMBLYAI_API_KEY;
-  const url = "https://api.assemblyai.com/v2/transcript";
-
-  const response = await axios.post(
-    url,
-    {
-      audio_url: `https://example.com/audio/${podcastId}.mp3`,
-      language_code: "en_us",
-      sentiment_analysis: true,
-      speaker_labels: true,
-      punctuate: true,
-    },
-    {
-      headers: {
-        Authorization: apiKey,
-        "Content-Type": "application/json",
-      },
-    },
-  );
-
-  const transcriptId = response.data.id;
-
-  const transcriptStatusResponse = await axios.get(
-    `https://api.assemblyai.com/v2/transcript/${transcriptId}`,
-    {
-      headers: {
-        Authorization: apiKey,
-      },
-    },
-  );
-
-  if (transcriptStatusResponse.data.status !== "completed") {
-    throw new Error("Transcript is not completed yet.");
-  }
-
-  return transcriptStatusResponse.data.words.map((word: any) => ({
-    start: word.start,
-    text: word.text,
-    sentiment: word.confidence > 0.8 ? "positive" : "neutral",
-    speaker: word.speaker,
-  }));
+async function getTranscript(
+  audioUrl: string,
+  podcastId: number,
+): Promise<any> {
+  let transcript = await client.transcripts.transcribe({
+    audio: audioUrl,
+    speaker_labels: true,
+  });
+  await updatePodcastTranscriptionId(podcastId, transcript.id);
+  const sentencesResponse = await client.transcripts.sentences(transcript.id);
+  const sentences = sentencesResponse.sentences;
+  return sentences;
 }
 
 async function translateText(
@@ -334,10 +305,13 @@ async function translateText(
   return response.data.translations[0].text;
 }
 
-async function addNewTranscript(
+export async function addNewTranscript(
   userId: string,
-  podcastId: number,
-  targetLang: string,
+  audioUrl: string,
+  targetLangs: string[] = ["es", "de", "fr"], // Default to Spanish, German, French
+  podcastTitle: string,
+  podcastAuthor: string,
+  podcastImageUrl?: string,
 ) {
   let user = await prisma.user.findUnique({
     where: { id: userId },
@@ -354,20 +328,53 @@ async function addNewTranscript(
     });
   }
 
-  const englishTranscript = await getTranscript(podcastId);
+  // Create a new podcast for the user
+  const podcast = await prisma.podcast.create({
+    data: {
+      title: podcastTitle,
+      author: podcastAuthor,
+      imageUrl: podcastImageUrl,
+      userId: userId, // Associate the podcast with the user
+    },
+  });
+
+  const englishTranscript = await getTranscript(audioUrl, podcast.podcastId);
 
   for (const line of englishTranscript) {
-    const translatedText = await translateText(line.text, targetLang);
+    for (const targetLang of targetLangs) {
+      const translatedText = await translateText(line.text, targetLang);
 
-    await prisma.transcript.create({
-      data: {
-        language: targetLang,
-        text: translatedText,
-        start: line.start,
-        sentiment: line.sentiment,
-        speaker: line.speaker,
-        podcastId: podcastId,
-      },
-    });
+      await prisma.transcript.create({
+        data: {
+          language: targetLang,
+          text: translatedText,
+          start: line.start,
+          sentiment: line.sentiment,
+          speaker: line.speaker,
+          podcastId: podcast.id, // Associate the transcript with the newly created podcast
+        },
+      });
+    }
   }
+}
+
+async function updatePodcastTranscriptionId(
+  podcastId: number,
+  transcriptionId: string,
+) {
+  const updatedPodcast = await prisma.podcast.update({
+    where: { id: podcastId }, // Find the podcast by its ID
+    data: {
+      transcriptionId: transcriptionId, // Set the new transcriptionId
+    },
+  });
+
+  return updatedPodcast;
+}
+async function askAI(transcriptId: string, question: string): Promise<string> {
+  const { response } = await client.lemur.task({
+    transcript_ids: [transcriptId],
+    prompt: question,
+  });
+  return response;
 }
